@@ -55,8 +55,9 @@ class Common:
         x2, y2 = end
 
         win32api.SetCursorPos((x1, y1))
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, x1, y1, 0, 0)
         time.sleep(0.5)
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, x1, y1, 0, 0)
+        time.sleep(0.1)
         # 計算每步的時間間隔和位移
         interval = duration / steps
         dx = (x2 - x1) / steps
@@ -77,7 +78,7 @@ class Common:
         win32api.SetCursorPos((x2, y2))
         time.sleep(0.5)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x2, y2, 0, 0)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     @staticmethod
     def doubleClick(x, y):

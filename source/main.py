@@ -12,20 +12,17 @@ import aircv
 import win32gui
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-if __name__ == "__main__":
-    sys.path.append("./api")
+sys.path.append("./api")
 
 from CVWindow import Window
 from WindowsOperation import Common
 
 
 _hwnd = None
-_FPS = 240
 _restrict_width = 800
 _restrict_height = 600
 # 目標到購買按鍵的距離
 _distance_under_800_600_w = 360
-_distance_under_800_600_h = 50
 
 ''' 待拆成 config '''
 e7_language = "zh-tw"
@@ -54,7 +51,7 @@ def get_window():
     if show_cmd != Common.show_cmd["normal"]:
         print("restore window")
         win32gui.ShowWindow(_hwnd, Common.show_cmd["restore"])
-    time.sleep(0.1)
+        time.sleep(0.1)
     print("window_position:", nor_pos)
 
     ''' 取得視窗內部尺寸 '''
@@ -645,7 +642,7 @@ class worker(QtCore.QThread):
             else:
                 Common.drag((self._origin[0] + 600, self._origin[1] + 300),
                             (self._origin[0] + 600, self._origin[1] + 100),
-                            0.8)
+                            0.5)
                 needRefresh = True
                 QtCore.QThread.sleep(1)
                 self.processDispatchMissionComplete(restartDispatchButton)
