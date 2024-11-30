@@ -5,10 +5,12 @@ import win32con
 
 
 class Common:
-    show_cmd = {
+    WINDOW_STATUS = {
         "normal": win32con.SW_SHOWNORMAL,
         "minimum": win32con.SW_SHOWMINIMIZED,
-        "maximum": win32con.SW_SHOWMAXIMIZED,
+        "maximum": win32con.SW_SHOWMAXIMIZED
+    }
+    WINDOW_OPERATION = {
         "restore": win32con.SW_RESTORE
     }
 
@@ -81,7 +83,7 @@ class Common:
         time.sleep(0.1)
 
     @staticmethod
-    def doubleClick(x, y):
+    def double_click(x, y):
         x = int(x)
         y = int(y)
         win32api.SetCursorPos((x, y))
@@ -94,13 +96,13 @@ class Common:
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x, y, 0, 0)
 
     @staticmethod
-    def get_correct_origin_of_inner_window(outer_size: tuple, inner_size: tuple):
+    def get_origin_and_size_of_inner(whole_size: tuple, inner_size: tuple):
         title_height = win32api.GetSystemMetrics(5)
         frame_height = win32api.GetSystemMetrics(9)
-        frame_width = math.ceil((outer_size[2] - outer_size[0] - inner_size[2]) / 2)
+        frame_width = math.ceil((whole_size[2] - whole_size[0] - inner_size[2]) / 2)
         # calc origin
-        left = outer_size[0] + frame_width
-        top = outer_size[1] + frame_height * 2 - title_height * 2
+        left = whole_size[0] + frame_width
+        top = whole_size[1] + frame_height * 2 - title_height * 2
         tmp = (left, top, 0, 0)
         return tuple(map(lambda x, y: x + y, tmp, inner_size))
 

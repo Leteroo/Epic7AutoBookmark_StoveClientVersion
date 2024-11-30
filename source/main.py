@@ -17,55 +17,51 @@ sys.path.append("./api")
 from CVWindow import Window
 from WindowsOperation import Common
 
-
-_hwnd = None
-_restrict_width = 800
-_restrict_height = 600
+_COVENANT_COUNT_MODE = 1
+_MYSTIC_COUNT_MODE = 2
+_STONE_COUNT_MODE = 3
+_ACCEPTED_WINDOW_WIDTH = 800
+_ACCEPTED_WINDOW_HEIGHT = 600
 # 目標到購買按鍵的距離
-_distance_under_800_600_w = 360
+_WIDTH_TO_BUYBUTTON = 360
 
 ''' 待拆成 config '''
-e7_language = "zh-tw"
-e7_window_name = "第七史诗"
-# 書籤
-friend = aircv.imread(f"./img/friendLocation.png")
-covenant = aircv.imread("./img/covenantLocation.png")
-mystic = aircv.imread("./img/mysticLocation.png")
-# 按鈕
-buyButton = aircv.imread(f"./img/buyButton-{e7_language}.png")
-refreshButton = aircv.imread(f"./img/refreshButton-{e7_language}.png")
-refreshYesButton = aircv.imread(f"./img/refreshYesButton-{e7_language}.png")
-restartDispatchButton = aircv.imread(f"./img/restartDispatchButton-{e7_language}.png")
+E7_language = "zh-tw"
+E7_window_title = "第七史诗"
 
+covenant_img = aircv.imread("./img/covenant_bookmark.png")
+mystic_img = aircv.imread("./img/mystic_bookmark.png")
+buy_button = aircv.imread("./img/buy_button.png")
 
-''' 找到 EPIC7 的客戶端視窗，這邊會需要系統管理員權限 '''
-def get_window():
-    global _hwnd
-    _hwnd = win32gui.FindWindow(None, e7_window_name)
+refresh_button = aircv.imread("./img/refresh_button.png")
+confirm_refresh_button = aircv.imread("./img/confirm_refresh_button.png")
+redispatch_button = aircv.imread("./img/redispatch_button.png")
+
+def catch_E7_window():
+    _hwnd = win32gui.FindWindow(None, E7_window_title)
     if not _hwnd:
         print("找不到視窗!")
         return
 
-    ''' 判斷是否為正常大小，不是的話復原(系統權限禍首) '''
-    flag, show_cmd, min_pos, max_pos, nor_pos = win32gui.GetWindowPlacement(_hwnd)
-    if show_cmd != Common.show_cmd["normal"]:
+    # 確保視窗正常展開(系統權限禍首-1)
+    flag, show_cmd, minimum_size, maximum_size, normal_size = win32gui.GetWindowPlacement(_hwnd)
+    if show_cmd != Common.WINDOW_STATUS["normal"]:
         print("restore window")
-        win32gui.ShowWindow(_hwnd, Common.show_cmd["restore"])
+        win32gui.ShowWindow(_hwnd, Common.WINDOW_OPERATION["restore"])
         time.sleep(0.1)
-    print("window_position:", nor_pos)
+    print("whole_window_size:", normal_size)
 
-    ''' 取得視窗內部尺寸 '''
+    # 取得正確原點
     inner_size = win32gui.GetClientRect(_hwnd)
-    print("inner_size:", inner_size)
+    print("window_inner_size:", inner_size)
+    origin_x, origin_y, width, height = Common.get_origin_and_size_of_inner(normal_size, inner_size)
 
-    ''' 內部視窗的原點 '''
-    left, top, width, height = Common.get_correct_origin_of_inner_window(nor_pos, inner_size)
+    # 限制視窗大小，實際上會更小一點，因為客戶端有綁視窗比例
+    if width != _ACCEPTED_WINDOW_WIDTH or height != _ACCEPTED_WINDOW_HEIGHT:
+        win32gui.MoveWindow(_hwnd, normal_size[0], normal_size[1], 
+                            _ACCEPTED_WINDOW_WIDTH, _ACCEPTED_WINDOW_HEIGHT, True)
 
-    ''' 限制視窗為 800*600，實際上會更小一點，因為客戶端有綁視窗比例 '''
-    if width != _restrict_width or height != _restrict_height:
-        win32gui.MoveWindow(_hwnd, nor_pos[0], nor_pos[1], _restrict_width, _restrict_height, True)
-
-    ''' 置頂與取消置頂(系統權限禍首-2) '''
+    ''' 置頂與取消置頂(系統權限禍首-2，暫不使用) '''
     # if not Common.check_topmost(_hwnd):
     #     print("topmost")
     #     Common.topmost(_hwnd)
@@ -73,15 +69,218 @@ def get_window():
     # print("dis topmost")
     # Common.dis_topmost(_hwnd)
 
-    window = Window("Test", _restrict_width, _restrict_height)
-    monitor = Window.create_monitor(left, top, _restrict_width, _restrict_height)
+    # window = Window("Capture", _ACCEPTED_WINDOW_WIDTH, _ACCEPTED_WINDOW_HEIGHT)
+    monitor = Window.create_monitor(origin_x, origin_y, _ACCEPTED_WINDOW_WIDTH, _ACCEPTED_WINDOW_HEIGHT)
 
-    return (left, top), window, monitor
+    # return (origin_x, origin_y), window, monitor
+    return (origin_x, origin_y), monitor
 
 def get_number(text):
     return int(text) if text.isdigit() else 0
 
-class Ui_Part:
+class Worker(QtCore.QThread):
+    isStart = QtCore.pyqtSignal()
+    isProgress = QtCore.pyqtSignal(str)
+    isFinish = QtCore.pyqtSignal()
+    isError = QtCore.pyqtSignal()
+    emitLog = QtCore.pyqtSignal(str)
+    emitMoney = QtCore.pyqtSignal(str)
+    emitStone = QtCore.pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        # self._origin, self._window, self._monitor = catch_E7_window()
+        self._origin, self._monitor = catch_E7_window()
+        # mss 為多執行續不友善，最好在使用時都重新實例化一次
+        _mss = mss.mss()
+        cur_screen = Window.capture_screen(_mss, self._monitor)
+        # self._window.show(cur_screen)
+
+    def set_variable(self, mode: int, qunatity: int, amount_of_money: int, amount_of_stone: int, redispatch: bool):
+        self.mode = mode
+        self.expected_quantity = qunatity
+        self.amount_of_money = amount_of_money
+        self.amount_of_stone = amount_of_stone
+        self.redispatch = redispatch
+    
+    def run(self):
+        self.isStart.emit()
+        print("mode:", self.mode)
+        print("expected_quantity:", self.expected_quantity)
+        
+        # check input
+        if self.amount_of_money < 280000:
+            self.emitLog.emit("錯誤: 金幣不足28萬")
+            raise ValueError("out of money")
+        if self.amount_of_stone < 3:
+            self.emitLog.emit("錯誤: 天空石不足以刷新商店")
+            raise ValueError("out of stone")
+        if self.mode == _STONE_COUNT_MODE and self.expected_quantity > self.amount_of_stone:
+            self.emitLog.emit("錯誤: 天空石使用數量大於持有數量")
+            raise ValueError("stone input error")
+
+        self.emitLog.emit("===== 初始化 =====")
+        self._reset_counter()
+        self._reset_flag()
+        _mss = mss.mss()
+        QtCore.QThread.sleep(1)
+
+        self.emitLog.emit("===== 刷商店 =====")
+        while self.expected_quantity > 0 and self.amount_of_money > 280000 and self.amount_of_stone >= 3:
+            cur_screen = Window.capture_screen(_mss, self._monitor)
+            # self._window.show(cur_screen)
+
+            # 聖約書籤
+            covenant_loc = aircv.find_template(cur_screen, covenant_img, 0.8)
+            print("covenant_loc: ", covenant_loc)
+            if covenant_loc and not self.find_covenant:
+                self.find_covenant = True
+                print("find covenant_img!")
+                self.emitLog.emit("找到聖約書籤")
+                self._buy_bookmark(covenant_loc, _COVENANT_COUNT_MODE, 184000, "covenant_found_times", _mss)
+            else:
+                print("not find covenant_img!")
+
+            # 神秘書籤
+            mystic_loc = aircv.find_template(cur_screen, mystic_img, 0.8)
+            print("mystic_loc:", mystic_loc)
+            if mystic_loc and not self.find_mystic:
+                self.find_mystic = True
+                print("find mystic_img!")
+                self.emitLog.emit("找到神秘書籤")
+                self._buy_bookmark(mystic_loc, _MYSTIC_COUNT_MODE, 280000, "mystic_found_times", _mss)
+            else:
+                print("not find mystic_img!")
+
+            # 重整商品
+            if self.need_refresh:
+                refresh_button_loc = aircv.find_template(cur_screen, refresh_button, 0.8)
+                print("refresh_button_loc: ", refresh_button_loc)
+                self._refresh(refresh_button_loc, _mss)
+            else:
+                Common.drag((self._origin[0] + 600, self._origin[1] + 300),
+                            (self._origin[0] + 600, self._origin[1] + 100), 0.5)
+                self.need_refresh = True
+                QtCore.QThread.sleep(1)
+                self._redispatch_check(redispatch_button, _mss)
+
+        # finished report
+        self.emitLog.emit("===== 結算 =====")
+        self.emitLog.emit("共花費:")
+        self.emitLog.emit(f"天空石: {self.refresh_times*3}個")
+        self.emitLog.emit(f"金幣: {self.covenant_found_times*184000 + self.mystic_found_times*280000}元")
+        self.emitLog.emit("獲得書籤:")
+        self.emitLog.emit(f"聖約: {self.covenant_found_times}次")
+        self.emitLog.emit(f"神秘: {self.mystic_found_times}次")
+
+        self.isFinish.emit()
+
+    # 重新執行派遣任務
+    def _redispatch_check(self, redispatch_button, mss):
+        if not self.redispatch:
+            return
+
+        cur_screen = Window.capture_screen(mss, self._monitor)
+        # self._window.show(cur_screen)
+        redispatch_button_loc = aircv.find_template(cur_screen, redispatch_button, 0.8)
+
+        if redispatch_button_loc:
+            print("Redispatching...")
+            self.emitLog.emit("重新進行派遣任務")
+            center_x, center_y = redispatch_button_loc["result"]
+            self._click_button(center_x, center_y, _mss, redispatch_button, "redispatch_button")
+            print("Finish.")
+            self.emitLog.emit("派遣完成")
+
+    def _buy_bookmark(self, loc, mode, cost, attr_name_of_found_times, mss):
+        while True:
+            # 第一次點擊
+            center_x, center_y = loc["result"]
+            Common.double_click(self._origin[0] + center_x + _WIDTH_TO_BUYBUTTON,
+                               self._origin[1] + center_y)
+            QtCore.QThread.sleep(1)
+            self._redispatch_check(redispatch_button, mss)
+            # 二次確認
+            cur_screen = Window.capture_screen(mss, self._monitor)
+            # self._window.show(cur_screen)
+            buy_button_loc = aircv.find_template(cur_screen, buy_button, 0.8)
+            print("buy_button_loc:", buy_button_loc)
+            if not self._confirm_paying(buy_button_loc, mode, cost, mss):
+                cur_times = getattr(self, attr_name_of_found_times)
+                setattr(self, attr_name_of_found_times, cur_times + 1)
+                self.emitMoney.emit(str(self.amount_of_money))
+                break
+            QtCore.QThread.sleep(1)
+
+    def _confirm_paying(self, loc, mode, cost, mss) -> int:
+        if not loc:
+            return -1
+        center_x, center_y = loc["result"]
+        self._click_button(center_x, center_y, mss, buy_button, "buy_button")
+        if self.mode == mode:
+            self.expected_quantity -= 1
+            self.emitLog.emit(f"剩餘次數: {self.expected_quantity}次")
+        self.amount_of_money -= cost
+        return 0
+    
+    def _refresh(self, loc, mss):
+        while True:
+            center_x, center_y = loc["result"]
+            # 第一次點擊
+            Common.double_click(self._origin[0] + center_x, self._origin[1] + center_y)
+            QtCore.QThread.sleep(1)
+            self._redispatch_check(redispatch_button, mss)
+            # 二次確認
+            cur_screen = Window.capture_screen(mss, self._monitor)
+            # self._window.show(cur_screen)
+            confirm_refresh_button_loc = aircv.find_template(cur_screen, confirm_refresh_button, 0.8)
+            print("refresh_button_after_click:", confirm_refresh_button_loc)
+            if not self._confirm_refreshing(confirm_refresh_button_loc, mss):
+                QtCore.QThread.sleep(1)
+                break
+            QtCore.QThread.sleep(1)
+    
+    def _confirm_refreshing(self, loc, mss) -> int:
+        if not loc:
+            return -1
+        center_x, center_y = loc["result"]
+        self._click_button(center_x, center_y, mss, confirm_refresh_button, "confirm_refresh_button")
+        if self.mode == _STONE_COUNT_MODE:
+            self.expected_quantity -= 3
+            self.emitLog.emit(f"剩餘次數: {int(self.expected_quantity/3)}次")
+
+        self.amount_of_stone -= 3
+        self.emitStone.emit(str(self.amount_of_stone))
+        self.refresh_times += 1
+        self._reset_flag()
+        return 0
+    
+    def _click_button(self, x, y, mss, button_img, button_name):
+        while True:
+            Common.double_click(self._origin[0] + x, self._origin[1] + y)
+            QtCore.QThread.sleep(1)
+            self._redispatch_check(redispatch_button, mss)
+            
+            cur_screen = Window.capture_screen(mss, self._monitor)
+            # self._window.show(cur_screen)
+            button_loc_after_click = aircv.find_template(cur_screen, button_img, 0.8)
+            print(f"{button_name}_loc_after_click:", button_loc_after_click)
+            
+            if not button_loc_after_click:
+                return
+            QtCore.QThread.sleep(1)
+    
+    def _reset_counter(self):
+        self.refresh_times = 0
+        self.covenant_found_times = 0
+        self.mystic_found_times = 0
+        
+    def _reset_flag(self):
+        self.need_refresh = False
+        self.find_covenant = False
+        self.find_mystic = False
+
+class UIPart:
     def __init__(self):
         self._constants()
 
@@ -89,7 +288,7 @@ class Ui_Part:
     def start_button_event(self):
         pass
 
-    def setupUi(self, root: QtWidgets):
+    def set_UI(self, root: QtWidgets):
         root.setObjectName("widget")
         root.resize(*self._WINDOW_SIZE)
         root.setMinimumSize(self._MINIMUM)
@@ -314,25 +513,25 @@ class Ui_Part:
         widget.setGeometry(QtCore.QRect(*geo))
         widget.setObjectName(name)
 
-class Main(QtWidgets.QWidget, Ui_Part):
+class Main(QtWidgets.QWidget, UIPart):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.start = False
         # 建立畫面
-        self.setupUi(self)
+        self.set_UI(self)
         self.bind_worker()
 
     def start_button_event(self):
         self.start = not self.start
 
         if self.start:
-            startMode = 0
-            expectNum = 0
-            moneyNum = get_number(self.moneyTotalShowEdit.text())
-            stoneNum = get_number(self.stoneTotalShowEdit.text())
-            autoRestartDispatch = self.autoRestartDispatchCheckbox.isChecked()
+            selected_mode = 0
+            expected_times = 0
+            amount_of_money = get_number(self.moneyTotalShowEdit.text())
+            amount_of_stone = get_number(self.stoneTotalShowEdit.text())
+            if_redispatch = self.autoRestartDispatchCheckbox.isChecked()
 
-            if not moneyNum or not stoneNum:
+            if not amount_of_money or not amount_of_stone:
                 self.logTextBrowser.setText("")
                 self.logTextBrowser.append("石頭或金幣輸入錯誤")
                 self.logTextBrowser.append("===== 停止 =====")
@@ -341,17 +540,17 @@ class Main(QtWidgets.QWidget, Ui_Part):
                 return
 
             if self.covenantRadioButton.isChecked():
-                startMode = 1
-                expectNum = get_number(self.covenantInput.text())
-                self.covenantInput.setText(str(expectNum))
+                selected_mode = _COVENANT_COUNT_MODE
+                expected_times = get_number(self.covenantInput.text())
+                self.covenantInput.setText(str(expected_times))
             elif self.mysticRadioButton.isChecked():
-                startMode = 2
-                expectNum = get_number(self.mysticInput.text())
-                self.mysticInput.setText(str(expectNum))
+                selected_mode = _MYSTIC_COUNT_MODE
+                expected_times = get_number(self.mysticInput.text())
+                self.mysticInput.setText(str(expected_times))
             elif self.stoneRadioButton.isChecked():
-                startMode = 3
-                expectNum = get_number(self.stoneInput.text())
-                self.stoneInput.setText(str(expectNum))
+                selected_mode = _STONE_COUNT_MODE
+                expected_times = get_number(self.stoneInput.text())
+                self.stoneInput.setText(str(expected_times))
             else:
                 self.logTextBrowser.append("沒有選取的radioButton,")
                 self.logTextBrowser.append("明明就預設會選一個,")
@@ -361,14 +560,14 @@ class Main(QtWidgets.QWidget, Ui_Part):
                 self._set_user_input_property()
                 return
 
-            self.worker.setVariable(startMode, expectNum, moneyNum, stoneNum, autoRestartDispatch)
+            self.worker.set_variable(selected_mode, expected_times, amount_of_money, amount_of_stone, if_redispatch)
             self.worker.start()
         else:
             self._terminate_woker()
         self._set_user_input_property()
 
     def bind_worker(self):
-        self.worker = worker()
+        self.worker = Worker()
         self.worker.isStart.connect(self._worker_start)
         self.worker.isFinish.connect(self._worker_stop)
         self.worker.isError.connect(self._worker_error)
@@ -405,259 +604,12 @@ class Main(QtWidgets.QWidget, Ui_Part):
         self.stoneInput.setDisabled(self.start)
         self.autoRestartDispatchCheckbox.setDisabled(self.start)
 
-    # 讓空白鍵等同"開始"按鈕
+    # 空白鍵綁定"開始"鍵
     def keyPressEvent(self, event) -> None:
         print("callkeyPressEvent:", event)
         if event.key() != QtCore.Qt.Key.Key_Space:
             return
         self.start_button_event()
-
-class worker(QtCore.QThread):
-    isStart = QtCore.pyqtSignal()
-    isProgress = QtCore.pyqtSignal(str)
-    isFinish = QtCore.pyqtSignal()
-    isError = QtCore.pyqtSignal()
-    emitLog = QtCore.pyqtSignal(str)
-    emitMoney = QtCore.pyqtSignal(str)
-    emitStone = QtCore.pyqtSignal(str)
-
-    def __init__(self):
-        super().__init__()
-        self._origin, self._window, self._monitor = get_window()
-        # mss 為多執行續不友善，最好在使用時都重新實例化一次
-        _mss = mss.mss()
-        img = Window.capture_screen(_mss, self._monitor)
-        self._window.show(img)
-        global _hwnd
-        print(_hwnd)
-
-    def setVariable(self, startMode: int, expectNum: int, moneyNum: int, stoneNum: int, autoRestartDispatch: bool):
-        self.startMode = startMode
-        self.expectNum = expectNum
-        self.moneyNum = moneyNum
-        self.stoneNum = stoneNum
-        self.autoRestartDispatch = autoRestartDispatch
-
-    # 重新執行派遣任務
-    def processDispatchMissionComplete(self, restartDispatchButton):
-        if not self.autoRestartDispatch:
-            return
-
-        _mss = mss.mss()
-        screenshot = Window.capture_screen(_mss, self._monitor)
-        self._window.show(screenshot)
-        condifence = 0.75
-        restartDispatchButtonLocation = aircv.find_template(screenshot, restartDispatchButton, condifence)
-
-        if restartDispatchButtonLocation:
-            print("dispatch mission completed!")
-            self.emitLog.emit("重新進行派遣任務")
-            while True:
-                restartDispatchFoundResult: tuple = restartDispatchButtonLocation["result"]
-                Common.doubleClick(self._origin[0] + restartDispatchFoundResult[0],
-                                   self._origin[1] + restartDispatchFoundResult[1])
-                QtCore.QThread.sleep(1)
-                Common.doubleClick(self._origin[0] + restartDispatchFoundResult[0],
-                                   self._origin[1] + restartDispatchFoundResult[1])
-                QtCore.QThread.sleep(1)
-                after_restartDispatch_screenshot = Window.capture_screen(_mss, self._monitor)
-                self._window.show(after_restartDispatch_screenshot)
-                restartDispatchButtonLocationAfter = aircv.find_template(
-                    after_restartDispatch_screenshot, restartDispatchButton, condifence
-                )
-                if not restartDispatchButtonLocationAfter:
-                    break
-            QtCore.QThread.sleep(1)
-
-    def run(self):
-        self.isStart.emit()
-        print("startMode: ", self.startMode)
-        print("expectedNum: ", self.expectNum)
-        # check input
-        if self.moneyNum < 280000:
-            self.emitLog.emit("錯誤: 金幣不足28萬")
-            raise ValueError("out of money")
-        if self.stoneNum < 3:
-            self.emitLog.emit("錯誤: 天空石不足以刷新商店")
-            raise ValueError("out of stone")
-        if self.startMode == 3 and self.expectNum > self.stoneNum:
-            self.emitLog.emit("錯誤: 天空石使用數量大於持有數量")
-            raise ValueError("stone input error")
-
-        self.emitLog.emit("===== 初始化 =====")
-        refreshTime = 0
-        covenantFoundTime = 0
-        mysticFoundTime = 0
-        needRefresh = False
-        covenantFound = False
-        mysticFound = False
-        _mss = mss.mss()
-        QtCore.QThread.sleep(1)
-
-        self.emitLog.emit("===== 刷商店 =====")
-        while self.expectNum > 0 and self.moneyNum > 280000 and self.stoneNum >= 3:
-            screenshot = Window.capture_screen(_mss, self._monitor)
-            self._window.show(screenshot)
-
-            ''' 聖約書籤 '''
-            covenantLocation = aircv.find_template(screenshot, covenant, 0.9)
-            print("covenant: ", covenantLocation)
-            if covenantLocation and not covenantFound:
-                covenantFound = True
-                print("find covenant!")
-                self.emitLog.emit("找到聖約書籤")
-                while True:
-                    covenantFoundResult: tuple = covenantLocation["result"]
-                    # 點擊購買
-                    Common.doubleClick(self._origin[0] + covenantFoundResult[0] + _distance_under_800_600_w,
-                                       self._origin[1] + covenantFoundResult[1])
-                    QtCore.QThread.sleep(1)
-                    self.processDispatchMissionComplete(restartDispatchButton)
-                    # 購買頁面
-                    buy_screenshot = Window.capture_screen(_mss, self._monitor)
-                    self._window.show(buy_screenshot)
-                    buyButtonLocation = aircv.find_template(buy_screenshot, buyButton, 0.9)
-                    print("buy_button:", buyButtonLocation)
-                    # 確定購買
-                    if buyButtonLocation:
-                        buyButtonFoundResult: tuple = buyButtonLocation["result"]
-                        while True:
-                            Common.doubleClick(self._origin[0] + buyButtonFoundResult[0],
-                                               self._origin[1] + buyButtonFoundResult[1])
-                            QtCore.QThread.sleep(1)
-                            self.processDispatchMissionComplete(restartDispatchButton)
-                            after_buy_screenshot = Window.capture_screen(_mss, self._monitor)
-                            self._window.show(after_buy_screenshot)
-                            buyButtonLocationAfter = aircv.find_template(
-                                after_buy_screenshot, buyButton, 0.9, True
-                            )
-                            print("buy_button_after:", buyButtonLocationAfter)
-                            if not buyButtonLocationAfter:
-                                break
-                            QtCore.QThread.sleep(1)
-                        if self.startMode == 1:
-                            self.expectNum -= 1
-                            self.emitLog.emit(f"剩餘次數: {self.expectNum}次")
-                        self.moneyNum -= 184000
-                        covenantFoundTime += 1
-                        self.emitMoney.emit(str(self.moneyNum))
-                        break
-                    QtCore.QThread.sleep(1)
-            else:
-                print("not find covenant!")
-
-            # 神秘書籤
-            mysticLocation = aircv.find_template(screenshot, mystic, 0.9)
-            print("mystic:", mysticLocation)
-            if mysticLocation and not mysticFound:
-                mysticFound = True
-                print("find mystic!")
-                self.emitLog.emit("找到神秘書籤")
-                while True:
-                    mysticFoundResult: tuple = mysticLocation["result"]
-                    # 點擊購買
-                    Common.doubleClick(self._origin[0] + mysticFoundResult[0] + _distance_under_800_600_w,
-                                       self._origin[1] + mysticFoundResult[1])
-                    QtCore.QThread.sleep(1)
-                    self.processDispatchMissionComplete(restartDispatchButton)
-                    # 購買頁面
-                    buy_screenshot = Window.capture_screen(_mss, self._monitor)
-                    self._window.show(buy_screenshot)
-                    buyButtonLocation = aircv.find_template(buy_screenshot, buyButton, 0.9)
-                    print("buy_button:", buyButtonLocation)
-                    # 確定購買
-                    if buyButtonLocation:
-                        buyButtonFoundResult: tuple = buyButtonLocation["result"]
-                        while True:
-                            Common.doubleClick(self._origin[0] + buyButtonFoundResult[0],
-                                               self._origin[1] + buyButtonFoundResult[1])
-                            QtCore.QThread.sleep(1)
-                            self.processDispatchMissionComplete(restartDispatchButton)
-                            after_buy_screenshot = Window.capture_screen(_mss, self._monitor)
-                            self._window.show(after_buy_screenshot)
-                            buyButtonLocationAfter = aircv.find_template(
-                                after_buy_screenshot, buyButton, 0.9, True
-                            )
-                            print("buy_button_after:", mysticLocation)
-                            if not buyButtonLocationAfter:
-                                break
-                            QtCore.QThread.sleep(1)
-                        if self.startMode == 2:
-                            self.expectNum -= 1
-                            self.emitLog.emit(f"剩餘次數: {self.expectNum}次")
-                        self.moneyNum -= 280000
-                        mysticFoundTime += 1
-                        self.emitMoney.emit(str(self.moneyNum))
-                        break
-                    QtCore.QThread.sleep(1)
-            else:
-                print("not find mystic!")
-
-            ''' 重新整理 '''
-            if needRefresh:
-                refreshButtonLocation = aircv.find_template(screenshot, refreshButton, 0.9)
-                print("refresh: ", refreshButtonLocation)
-                while True:
-                    refreshButtonFoundResult: tuple = refreshButtonLocation["result"]
-                    # 點擊重新整理
-                    Common.doubleClick(self._origin[0] + refreshButtonFoundResult[0],
-                                       self._origin[1] + refreshButtonFoundResult[1])
-                    QtCore.QThread.sleep(1)
-                    self.processDispatchMissionComplete(restartDispatchButton)
-                    confirm_screenshot = Window.capture_screen(_mss, self._monitor)
-                    self._window.show(confirm_screenshot)
-                    refreshYesButtonLocation = aircv.find_template(
-                        confirm_screenshot, refreshYesButton, 0.9
-                    )
-                    print("confirm_to_refresh:", refreshYesButtonLocation)
-                    # 確定重整
-                    if refreshYesButtonLocation:
-                        refreshYesButtonFoundResult: tuple = refreshYesButtonLocation["result"]
-                        while True:
-                            Common.doubleClick(self._origin[0] + refreshYesButtonFoundResult[0],
-                                               self._origin[1] + refreshYesButtonFoundResult[1])
-                            QtCore.QThread.sleep(1)
-                            self.processDispatchMissionComplete(restartDispatchButton)
-                            after_click_yes_screenshot = Window.capture_screen(_mss, self._monitor)
-                            self._window.show(after_click_yes_screenshot)
-                            refreshYesButtonLocation = aircv.find_template(
-                                after_click_yes_screenshot, refreshYesButton, 0.9
-                            )
-                            print("confirm_to_refresh_after:", refreshYesButtonLocation)
-                            if not refreshYesButtonLocation:
-                                break
-                            QtCore.QThread.sleep(1)
-                        self.stoneNum -= 3
-                        self.emitStone.emit(str(self.stoneNum))
-                        refreshTime += 1
-                        if self.startMode == 3:
-                            self.expectNum -= 3
-                            self.emitLog.emit(f"剩餘次數: {int(self.expectNum/3)}次")
-                        needRefresh = False
-                        covenantFound = False
-                        mysticFound = False
-                        QtCore.QThread.sleep(1)
-                        break
-                    QtCore.QThread.sleep(1)
-            else:
-                Common.drag((self._origin[0] + 600, self._origin[1] + 300),
-                            (self._origin[0] + 600, self._origin[1] + 100),
-                            0.5)
-                needRefresh = True
-                QtCore.QThread.sleep(1)
-                self.processDispatchMissionComplete(restartDispatchButton)
-
-        # finished report
-        self.emitLog.emit("===== 結算 =====")
-        self.emitLog.emit("共花費:")
-        self.emitLog.emit(f"天空石: {refreshTime*3}個")
-        self.emitLog.emit(f"金幣: {covenantFoundTime*184000+mysticFoundTime*280000}元")
-        self.emitLog.emit("獲得書籤:")
-        self.emitLog.emit(f"聖約: {covenantFoundTime}次")
-        self.emitLog.emit(f"神秘: {mysticFoundTime}次")
-
-        self.isFinish.emit()
-
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([__file__])
