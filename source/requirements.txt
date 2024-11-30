@@ -1,0 +1,7 @@
+aircv==1.4.6
+mss==10.0.0
+numpy==2.1.3
+opencv_python==4.10.0.84
+PyQt6==6.7.1
+PyQt6_sip==13.8.0
+pywin32==308
