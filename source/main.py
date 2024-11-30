@@ -7,6 +7,7 @@
 
 import sys
 import time
+import threading
 import mss
 import aircv
 import win32gui
@@ -562,8 +563,10 @@ class Main(QtWidgets.QWidget, UIPart):
 
             self.worker.set_variable(selected_mode, expected_times, amount_of_money, amount_of_stone, if_redispatch)
             self.worker.start()
+            self.showMinimized()
         else:
             self._terminate_woker()
+            self.showNormal()
         self._set_user_input_property()
 
     def bind_worker(self):
@@ -604,12 +607,13 @@ class Main(QtWidgets.QWidget, UIPart):
         self.stoneInput.setDisabled(self.start)
         self.autoRestartDispatchCheckbox.setDisabled(self.start)
 
-    # 空白鍵綁定"開始"鍵
-    def keyPressEvent(self, event) -> None:
-        print("callkeyPressEvent:", event)
-        if event.key() != QtCore.Qt.Key.Key_Space:
-            return
-        self.start_button_event()
+    # 按下 F12 開始或停止
+    def detect_f12(self):
+        while True:
+            if not Common.detect("F12") or not self.start:
+                continue
+            self.start_button_event()
+            time.sleep(0.01)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([__file__])
@@ -618,5 +622,7 @@ if __name__ == "__main__":
     # create GUI
     root = Main()
     root.show()
+    
+    threading.Thread(target=root.detect_f12, daemon=True).start()
 
     sys.exit(app.exec())

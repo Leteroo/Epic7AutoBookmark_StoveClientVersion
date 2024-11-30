@@ -4,7 +4,11 @@ import win32api
 import win32con
 
 
+
 class Common:
+    KEYBOARD_BUTTON = {
+        "F12" : win32con.VK_F12
+    }
     WINDOW_STATUS = {
         "normal": win32con.SW_SHOWNORMAL,
         "minimum": win32con.SW_SHOWMINIMIZED,
@@ -106,4 +110,9 @@ class Common:
         tmp = (left, top, 0, 0)
         return tuple(map(lambda x, y: x + y, tmp, inner_size))
 
-
+    @classmethod
+    def detect(cls, button: str):
+        target = cls.KEYBOARD_BUTTON.get(button, None)
+        if target is None:
+            return False
+        return win32api.GetAsyncKeyState(target)
