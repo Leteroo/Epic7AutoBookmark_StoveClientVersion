@@ -28,7 +28,7 @@ _WIDTH_TO_BUYBUTTON = 360
 
 ''' 待拆成 config '''
 E7_language = "zh-tw"
-E7_window_title = "第七史诗"
+E7_window_title = "第七史詩"
 
 covenant_img = aircv.imread("./img/covenant_bookmark.png")
 mystic_img = aircv.imread("./img/mystic_bookmark.png")
