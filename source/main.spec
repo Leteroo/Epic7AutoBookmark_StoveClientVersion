@@ -1,14 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-#import os
-#import sys
-#from PyInstaller.utils.hooks import collect_data_files
-
-#api_folder = os.path.join(os.getcwd(), 'api')
-## 包含 api 資料夾中的所有檔案
-#api_datas = collect_data_files('api', subdir=True)
 
 my_files = ['main.py', './api/WindowsOperation.py', './api/CVWindow.py']
-
 
 a = Analysis(
     my_files,
@@ -38,6 +30,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+	version='version.txt',
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

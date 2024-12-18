@@ -189,7 +189,7 @@ class Worker(QtCore.QThread):
             print("Redispatching...")
             self.emitLog.emit("重新進行派遣任務")
             center_x, center_y = redispatch_button_loc["result"]
-            self._click_button(center_x, center_y, _mss, redispatch_button, "redispatch_button")
+            self._click_button(center_x, center_y, mss, redispatch_button, "redispatch_button")
             print("Finish.")
             self.emitLog.emit("派遣完成")
 
