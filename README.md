@@ -1,5 +1,5 @@
 # Latest update: 2024/12/18  
-Bug fix: 
+Bug fix: Error occur while redispatching
 
 # Epic7AutoBookmark_StoveClientVersion  
 基於此開源: https://github.com/steven010116/epic7autoBookmark/tree/main  
