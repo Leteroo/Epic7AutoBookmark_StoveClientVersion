@@ -1,6 +1,7 @@
 # Latest update: 2025/04/12  
 Revise /img files because of some altered icons from Epic7
 
+
 # Epic7AutoBookmark_StoveClientVersion  
 基於此開源: https://github.com/steven010116/epic7autoBookmark/tree/main  
 改成支援電腦版第七史詩的工具，目前小工具跟第七史詩的語系都只支援繁體中文。

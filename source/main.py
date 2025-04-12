@@ -8,8 +8,6 @@
 import sys
 import time
 import threading
-from operator import ifloordiv
-
 import mss
 import aircv
 import win32gui
@@ -32,6 +30,7 @@ _WIDTH_TO_BUYBUTTON = 360
 E7_language = "zh-tw"
 E7_window_title = "第七史詩"
 DEBUG = 0
+
 
 covenant_img = aircv.imread("./img/covenant_bookmark.png")
 mystic_img = aircv.imread("./img/mystic_bookmark.png")
@@ -270,7 +269,6 @@ class Worker(QtCore.QThread):
         return 0
     
     def _click_button(self, x, y, mss, button_img, button_name):
-        got = 0
         while True:
             Common.double_click(self._origin[0] + x, self._origin[1] + y)
             QtCore.QThread.sleep(1)
