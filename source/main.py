@@ -31,7 +31,6 @@ E7_language = "zh-tw"
 E7_window_title = "第七史詩"
 DEBUG = 0
 
-
 covenant_img = aircv.imread("./img/covenant_bookmark.png")
 mystic_img = aircv.imread("./img/mystic_bookmark.png")
 buy_button = aircv.imread("./img/buy_button.png")
@@ -80,6 +79,21 @@ def catch_E7_window():
 def get_number(text):
     return int(text) if text.isdigit() else 0
 
+class Detect(QtCore.QThread):
+    isFinish = QtCore.pyqtSignal()
+    def __init__(self, table):
+        super().__init__()
+        self.table = table
+
+    def run(self):
+        while True:
+            print('detect F12')
+            time.sleep(0.1)
+            if not self.table['start'] or not Common.detect("F12"):
+                continue
+            self.isFinish.emit()
+            print('F12 stop')
+
 class Worker(QtCore.QThread):
     isStart = QtCore.pyqtSignal()
     isProgress = QtCore.pyqtSignal(str)
@@ -96,7 +110,6 @@ class Worker(QtCore.QThread):
             _mss = mss.mss()
             _cur_screen = Window.capture_screen(_mss, self._monitor)
             self._window.show(_cur_screen)
-
 
     def set_variable(self, mode: int, qunatity: int, amount_of_money: int, amount_of_stone: int, redispatch: bool):
         self.mode = mode
@@ -530,17 +543,18 @@ class UIPart:
 class Main(QtWidgets.QWidget, UIPart):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.start = False
+        self.table = {
+            'start': False
+        }
         # 建立畫面
         self.set_UI(self)
         self.bind_worker()
+        self.bind_detect()
 
     def start_button_event(self):
-        self.start = not self.start
+        self.table['start'] = not self.table['start']
 
-        if self.start:
-            selected_mode = 0
-            expected_times = 0
+        if self.table['start']:
             amount_of_money = get_number(self.moneyTotalShowEdit.text())
             amount_of_stone = get_number(self.stoneTotalShowEdit.text())
             if_redispatch = self.autoRestartDispatchCheckbox.isChecked()
@@ -549,7 +563,7 @@ class Main(QtWidgets.QWidget, UIPart):
                 self.logTextBrowser.setText("")
                 self.logTextBrowser.append("石頭或金幣輸入錯誤")
                 self.logTextBrowser.append("===== 停止 =====")
-                self.start = not self.start
+                self.table['start'] = not self.table['start']
                 self._set_user_input_property()
                 return
 
@@ -570,16 +584,18 @@ class Main(QtWidgets.QWidget, UIPart):
                 self.logTextBrowser.append("明明就預設會選一個,")
                 self.logTextBrowser.append("你是怎麼取消掉的? 能不能教我?")
                 self.logTextBrowser.append("===== 停止 =====")
-                self.start = not self.start
+                self.table['start'] = not self.table['start']
                 self._set_user_input_property()
                 return
 
             self.worker.set_variable(selected_mode, expected_times, amount_of_money, amount_of_stone, if_redispatch)
             self.worker.start()
+            self.detect.start()
             self.showMinimized()
             print("worker start")
         else:
             self._terminate_woker()
+            self.detect.terminate()
             self.showNormal()
             print("worker stop")
         self._set_user_input_property()
@@ -594,17 +610,21 @@ class Main(QtWidgets.QWidget, UIPart):
         self.worker.emitMoney.connect(lambda text: self.moneyTotalShowEdit.setText(text))
         self.worker.emitStone.connect(lambda text: self.stoneTotalShowEdit.setText(text))
 
+    def bind_detect(self):
+        self.detect = Detect(self.table)
+        self.detect.isFinish.connect(self.start_button_event)
+
     def _worker_start(self):
         self.logTextBrowser.setText("")
         self._set_user_input_property()
 
     def _worker_stop(self):
-        self.start = False
+        self.table['start'] = False
         self._set_user_input_property()
         self.showNormal()
 
     def _worker_error(self):
-        self.start = False
+        self.table['start'] = False
         self._set_user_input_property()
         self.showNormal()
 
@@ -613,24 +633,16 @@ class Main(QtWidgets.QWidget, UIPart):
         self.logTextBrowser.append("===== 停止 =====")
 
     def _set_user_input_property(self):
-        self.startButton.setText("停止" if self.start else "開始")
-        self.covenantRadioButton.setDisabled(self.start)
-        self.mysticRadioButton.setDisabled(self.start)
-        self.stoneRadioButton.setDisabled(self.start)
-        self.moneyTotalShowEdit.setDisabled(self.start)
-        self.stoneTotalShowEdit.setDisabled(self.start)
-        self.covenantInput.setDisabled(self.start)
-        self.mysticInput.setDisabled(self.start)
-        self.stoneInput.setDisabled(self.start)
-        self.autoRestartDispatchCheckbox.setDisabled(self.start)
-
-    # 按下 F12 開始或停止
-    def detect_f12(self):
-        while True:
-            time.sleep(0.05)
-            if not Common.detect("F12") or not self.start:
-                continue
-            self.start_button_event()
+        self.startButton.setText("停止" if self.table['start'] else "開始")
+        self.covenantRadioButton.setDisabled(self.table['start'])
+        self.mysticRadioButton.setDisabled(self.table['start'])
+        self.stoneRadioButton.setDisabled(self.table['start'])
+        self.moneyTotalShowEdit.setDisabled(self.table['start'])
+        self.stoneTotalShowEdit.setDisabled(self.table['start'])
+        self.covenantInput.setDisabled(self.table['start'])
+        self.mysticInput.setDisabled(self.table['start'])
+        self.stoneInput.setDisabled(self.table['start'])
+        self.autoRestartDispatchCheckbox.setDisabled(self.table['start'])
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
@@ -639,7 +651,5 @@ if __name__ == "__main__":
     # create GUI
     root = Main()
     root.show()
-    
-    threading.Thread(target=root.detect_f12, daemon=True).start()
 
     sys.exit(app.exec())

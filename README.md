@@ -1,5 +1,5 @@
-# Latest update: 2025/04/12  
-Revise /img files because of some altered icons from Epic7
+# Latest update: 2025/04/19
+Bug fixed: detect F12 to stop script
 
 
 # Epic7AutoBookmark_StoveClientVersion  
@@ -11,13 +11,15 @@ Revise /img files because of some altered icons from Epic7
 ## 一、環境
 1. windows10 / windows11  
 i. 顯示：1920 x 1080  
+ii. 測試過可使用倍率 100%、125%
 2. 第七史詩設定  
 i. 語言選擇繁體中文  
 3. Python  
-i. 開發環境 3.10，不確定向下相容多少  
-4. 文件架構  
-i. released : 執行檔，一般使用者只須要保留這個文件。  
-ii. source : 原始碼，開發與編譯都在這個文件下執行。
+i. 開發環境 3.13，不確定向下相容多少  
+4. 文件架構    
+i. api/：opencv 與 windows 視窗操作的 libs。  
+ii. img/：自截的遊戲圖檔  
+iii. requirements.txt：需求模組
  
 ## 二、使用方式
   
