@@ -6,4 +6,4 @@ build/
 dist/
 .env
 released/
-
+./source/idea/
