@@ -1,5 +1,5 @@
-# Latest update: 2025/04/19
-Bug fixed: detect F12 to stop script
+# Latest update: 2025/04/22
+Bug fixed: In Sky Stone mode, the loop keeps running even after reaching the expected times.
 
 
 # Epic7AutoBookmark_StoveClientVersion  

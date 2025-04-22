@@ -176,9 +176,9 @@ class Worker(QtCore.QThread):
                 refresh_button_loc = aircv.find_template(cur_screen, refresh_button, 0.8)
                 print("refresh_button_loc: ", refresh_button_loc)
                 self._refresh(refresh_button_loc, _mss)
-                self.emitStone.emit(str(self.amount_of_stone))
                 self.amount_of_stone -= 3
                 self.refresh_times += 1
+                self.emitStone.emit(str(self.amount_of_stone))
                 self._reset_flag()
             else:
                 Common.drag((self._origin[0] + 600, self._origin[1] + 300),
@@ -186,7 +186,7 @@ class Worker(QtCore.QThread):
                 self.need_refresh = True
                 QtCore.QThread.sleep(1)
                 self._redispatch_check(redispatch_button, _mss)
-                if  self.expected_quantity == 0 or \
+                if  self.expected_quantity <= 0 or \
                     self.amount_of_money < 280000 or \
                     self.amount_of_stone < 3:
                     break
@@ -276,8 +276,8 @@ class Worker(QtCore.QThread):
         center_x, center_y = loc["result"]
         self._click_button(center_x, center_y, mss, confirm_refresh_button, "confirm_refresh_button")
         if self.mode == _STONE_COUNT_MODE:
-            self.expected_quantity -= 3
-            self.emitLog.emit(f"剩餘次數: {int(self.expected_quantity/3)}次")
+            self.expected_quantity -= 1
+            self.emitLog.emit(f"剩餘次數: {self.expected_quantity}次")
 
         return 0
     
@@ -570,15 +570,20 @@ class Main(QtWidgets.QWidget, UIPart):
             if self.covenantRadioButton.isChecked():
                 selected_mode = _COVENANT_COUNT_MODE
                 expected_times = get_number(self.covenantInput.text())
-                self.covenantInput.setText(str(expected_times))
+                if not expected_times:
+                    self.covenantInput.setText('0')
             elif self.mysticRadioButton.isChecked():
                 selected_mode = _MYSTIC_COUNT_MODE
                 expected_times = get_number(self.mysticInput.text())
-                self.mysticInput.setText(str(expected_times))
+                if not expected_times:
+                    self.mysticInput.setText('0')
             elif self.stoneRadioButton.isChecked():
                 selected_mode = _STONE_COUNT_MODE
-                expected_times = get_number(self.stoneInput.text())
-                self.stoneInput.setText(str(expected_times))
+                origin_num = get_number(self.stoneInput.text())
+                expected_times = origin_num // 3
+                if not expected_times and not origin_num:
+                    self.stoneInput.setText('0')
+
             else:
                 self.logTextBrowser.append("沒有選取的radioButton,")
                 self.logTextBrowser.append("明明就預設會選一個,")
@@ -592,19 +597,17 @@ class Main(QtWidgets.QWidget, UIPart):
             self.worker.start()
             self.detect.start()
             self.showMinimized()
-            print("worker start")
         else:
-            self._terminate_woker()
-            self.detect.terminate()
+            self._stop_threads()
+            self.logTextBrowser.append("===== 停止 =====")
             self.showNormal()
-            print("worker stop")
         self._set_user_input_property()
 
     def bind_worker(self):
         self.worker = Worker()
         self.worker.isStart.connect(self._worker_start)
-        self.worker.isFinish.connect(self._worker_stop)
-        self.worker.isError.connect(self._worker_error)
+        self.worker.isFinish.connect(self._stop_threads)
+        self.worker.isError.connect(self._stop_threads)
 
         self.worker.emitLog.connect(lambda text: self.logTextBrowser.append(text))
         self.worker.emitMoney.connect(lambda text: self.moneyTotalShowEdit.setText(text))
@@ -618,19 +621,13 @@ class Main(QtWidgets.QWidget, UIPart):
         self.logTextBrowser.setText("")
         self._set_user_input_property()
 
-    def _worker_stop(self):
+    def _stop_threads(self):
         self.table['start'] = False
         self._set_user_input_property()
-        self.showNormal()
-
-    def _worker_error(self):
-        self.table['start'] = False
-        self._set_user_input_property()
-        self.showNormal()
-
-    def _terminate_woker(self):
+        self.detect.terminate()
         self.worker.terminate()
-        self.logTextBrowser.append("===== 停止 =====")
+        self.showNormal()
+        print('threads stop')
 
     def _set_user_input_property(self):
         self.startButton.setText("停止" if self.table['start'] else "開始")
